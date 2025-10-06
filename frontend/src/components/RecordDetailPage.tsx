@@ -4,20 +4,28 @@ import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { AspectRatio } from "./ui/aspect-ratio";
-import { Star, Camera, ArrowLeft } from "lucide-react";
-import { getRecord, Record } from "../lib/firestore";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
+import { Star, Camera, ArrowLeft, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { getRecord, Record, deleteRecord } from "../lib/firestore";
 import { Timestamp } from "firebase/firestore";
 
 interface RecordDetailPageProps {
   recordId: string;
   onBack: () => void;
   onEdit: (recordId: string) => void;
+  onDelete: (recordId: string) => void;
 }
 
-export function RecordDetailPage({ recordId, onBack, onEdit }: RecordDetailPageProps) {
+export function RecordDetailPage({ recordId, onBack, onEdit, onDelete }: RecordDetailPageProps) {
   const [record, setRecord] = useState<Record | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     fetchRecord();
@@ -37,6 +45,16 @@ export function RecordDetailPage({ recordId, onBack, onEdit }: RecordDetailPageP
     }
 
     setLoading(false);
+  };
+
+  const handleDelete = async () => {
+    const { error: deleteError } = await deleteRecord(recordId);
+    if (deleteError) {
+      setError('삭제 중 오류가 발생했습니다.');
+      console.error('Delete error:', deleteError);
+    } else {
+      onDelete(recordId);
+    }
   };
 
   const renderStars = (rating: number) => {
@@ -100,14 +118,60 @@ export function RecordDetailPage({ recordId, onBack, onEdit }: RecordDetailPageP
             <ArrowLeft size={20} />
           </button>
           <h1 className="flex-1 text-center">기록 상세</h1>
-          <button
-            onClick={() => onEdit(recordId)}
-            className="absolute right-0 px-4 py-2 bg-card text-foreground hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            수정
-          </button>
+          <div className="absolute right-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                  <MoreVertical size={20} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onClick={() => onEdit(recordId)}
+                  className="cursor-pointer"
+                >
+                  <Pencil size={16} className="mr-2" />
+                  수정하기
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="cursor-pointer text-red-600 focus:text-red-600"
+                >
+                  <Trash2 size={16} className="mr-2" />
+                  삭제하기
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-lg p-6 max-w-sm mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold mb-2">기록 삭제</h3>
+            <p className="text-gray-600 mb-6">정말로 이 기록을 삭제하시겠습니까?</p>
+            <div className="flex gap-3 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteConfirm(false)}
+              >
+                취소
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  handleDelete();
+                }}
+              >
+                삭제
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">

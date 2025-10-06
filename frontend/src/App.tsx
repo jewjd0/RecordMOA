@@ -49,6 +49,11 @@ export default function App() {
             // TODO: 수정 페이지로 이동
             console.log('Edit record:', recordId);
           }}
+          onDelete={(recordId) => {
+            setShowRecordDetail(false);
+            setSelectedRecordId(null);
+            setRefreshKey(prev => prev + 1);
+          }}
         />
       );
     }

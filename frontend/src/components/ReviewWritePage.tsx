@@ -5,13 +5,19 @@ import { Textarea } from "./ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { AspectRatio } from "./ui/aspect-ratio";
 import { Star, Camera, ArrowLeft } from "lucide-react";
+import { addRecord } from "../lib/firestore";
+import { auth } from "../lib/firebase";
+import { Timestamp } from "firebase/firestore";
 
 interface ReviewWritePageProps {
   onBack: () => void;
 }
 
 export function ReviewWritePage({ onBack }: ReviewWritePageProps) {
+  const [activeTab, setActiveTab] = useState<'movie' | 'book' | 'place'>('movie');
   const [rating, setRating] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [movieData, setMovieData] = useState({
     title: "",
     cast: "",
@@ -46,6 +52,103 @@ export function ReviewWritePage({ onBack }: ReviewWritePageProps) {
     ));
   };
 
+  const handleSave = async () => {
+    if (!auth.currentUser) {
+      setError("로그인이 필요합니다.");
+      return;
+    }
+
+    // Validate required fields
+    if (activeTab === 'movie') {
+      if (!movieData.title || !movieData.watchDate || rating === 0) {
+        setError("제목, 시청 날짜, 평가는 필수 항목입니다.");
+        return;
+      }
+    } else if (activeTab === 'book') {
+      if (!bookData.title || !bookData.startDate || rating === 0) {
+        setError("제목, 읽기 시작한 날짜, 평가는 필수 항목입니다.");
+        return;
+      }
+    } else if (activeTab === 'place') {
+      if (!placeData.name || !placeData.visitDate || rating === 0) {
+        setError("장소명, 방문 날짜, 평가는 필수 항목입니다.");
+        return;
+      }
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const userId = auth.currentUser.uid;
+
+      if (activeTab === 'movie') {
+        await addRecord(userId, {
+          category: 'movie',
+          title: movieData.title,
+          cast: movieData.cast ? movieData.cast.split(',').map(c => c.trim()) : undefined,
+          director: movieData.director || undefined,
+          date_watched: Timestamp.fromDate(new Date(movieData.watchDate)),
+          rating,
+          review: movieData.content || ''
+        });
+      } else if (activeTab === 'book') {
+        await addRecord(userId, {
+          category: 'book',
+          title: bookData.title,
+          author: bookData.author || undefined,
+          publisher: bookData.publisher || undefined,
+          date_started: Timestamp.fromDate(new Date(bookData.startDate)),
+          date_finished: bookData.endDate ? Timestamp.fromDate(new Date(bookData.endDate)) : undefined,
+          rating,
+          review: bookData.content || ''
+        });
+      } else if (activeTab === 'place') {
+        await addRecord(userId, {
+          category: 'place',
+          title: placeData.name,
+          place_name: placeData.name,
+          location: placeData.location || undefined,
+          date_visited: Timestamp.fromDate(new Date(placeData.visitDate)),
+          rating,
+          review: placeData.content || ''
+        });
+      }
+
+      // Reset form
+      setRating(0);
+      setMovieData({
+        title: "",
+        cast: "",
+        director: "",
+        watchDate: "",
+        content: ""
+      });
+      setBookData({
+        title: "",
+        author: "",
+        publisher: "",
+        startDate: "",
+        endDate: "",
+        content: ""
+      });
+      setPlaceData({
+        name: "",
+        location: "",
+        visitDate: "",
+        content: ""
+      });
+
+      // Go back to list
+      onBack();
+    } catch (err) {
+      console.error("Error saving record:", err);
+      setError("저장 중 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-card">
       {/* Header */}
@@ -63,7 +166,13 @@ export function ReviewWritePage({ onBack }: ReviewWritePageProps) {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        <Tabs defaultValue="movie" className="p-4">
+        {error && (
+          <div className="mx-4 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            {error}
+          </div>
+        )}
+
+        <Tabs defaultValue="movie" className="p-4" onValueChange={(value) => setActiveTab(value as 'movie' | 'book' | 'place')}>
           {/* Category Tabs */}
           <TabsList className="grid w-full grid-cols-3 mb-6">
             <TabsTrigger value="movie" className="tab-title">영상</TabsTrigger>
@@ -105,8 +214,12 @@ export function ReviewWritePage({ onBack }: ReviewWritePageProps) {
 
       {/* Fixed Save Button */}
       <div className="p-4 border-t border-gray-200 mb-16 bg-card">
-        <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-          저장
+        <Button
+          onClick={handleSave}
+          disabled={loading}
+          className="w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          {loading ? '저장 중...' : '저장'}
         </Button>
       </div>
     </div>
@@ -128,7 +241,7 @@ interface MovieFormProps {
   renderStars: () => JSX.Element[];
 }
 
-function MovieForm({ rating, data, onRatingChange, onDataChange, renderStars }: MovieFormProps) {
+function MovieForm({ data, onDataChange, renderStars }: MovieFormProps) {
   const handleChange = (field: string, value: string) => {
     onDataChange({ ...data, [field]: value });
   };
@@ -234,7 +347,7 @@ interface BookFormProps {
   renderStars: () => JSX.Element[];
 }
 
-function BookForm({ rating, data, onRatingChange, onDataChange, renderStars }: BookFormProps) {
+function BookForm({ data, onDataChange, renderStars }: BookFormProps) {
   const handleChange = (field: string, value: string) => {
     onDataChange({ ...data, [field]: value });
   };
@@ -349,7 +462,7 @@ interface PlaceFormProps {
   renderStars: () => JSX.Element[];
 }
 
-function PlaceForm({ rating, data, onRatingChange, onDataChange, renderStars }: PlaceFormProps) {
+function PlaceForm({ data, onDataChange, renderStars }: PlaceFormProps) {
   const handleChange = (field: string, value: string) => {
     onDataChange({ ...data, [field]: value });
   };

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { NavigationBar } from './components/NavigationBar';
 import { ReviewWritePage } from './components/ReviewWritePage';
 import { RecordsListPage } from './components/RecordsListPage';
+import { RecordDetailPage } from './components/RecordDetailPage';
 import { StatsPage } from './components/StatsPage';
 import { StatsDetailPage } from './components/StatsDetailPage';
 import { MyPage } from './components/MyPage';
@@ -17,6 +18,9 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState('records');
   const [showStatsDetail, setShowStatsDetail] = useState(false);
   const [showWritePage, setShowWritePage] = useState(false);
+  const [showRecordDetail, setShowRecordDetail] = useState(false);
+  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const unsubscribe = onAuthChange((authUser) => {
@@ -32,19 +36,57 @@ export default function App() {
       return <StatsDetailPage onBack={() => setShowStatsDetail(false)} />;
     }
 
+    if (showRecordDetail && selectedRecordId) {
+      return (
+        <RecordDetailPage
+          recordId={selectedRecordId}
+          onBack={() => {
+            setShowRecordDetail(false);
+            setSelectedRecordId(null);
+            setRefreshKey(prev => prev + 1);
+          }}
+          onEdit={(recordId) => {
+            // TODO: 수정 페이지로 이동
+            console.log('Edit record:', recordId);
+          }}
+        />
+      );
+    }
+
     if (showWritePage) {
-      return <ReviewWritePage onBack={() => setShowWritePage(false)} />;
+      return <ReviewWritePage onBack={() => {
+        setShowWritePage(false);
+        setRefreshKey(prev => prev + 1);
+      }} />;
     }
 
     switch (currentPage) {
       case 'records':
-        return <RecordsListPage onWriteReview={() => setShowWritePage(true)} />;
+        return (
+          <RecordsListPage
+            key={refreshKey}
+            onWriteReview={() => setShowWritePage(true)}
+            onViewDetail={(recordId) => {
+              setSelectedRecordId(recordId);
+              setShowRecordDetail(true);
+            }}
+          />
+        );
       case 'stats':
         return <StatsPage onShowDetail={() => setShowStatsDetail(true)} />;
       case 'my':
         return <MyPage />;
       default:
-        return <RecordsListPage onWriteReview={() => setShowWritePage(true)} />;
+        return (
+          <RecordsListPage
+            key={refreshKey}
+            onWriteReview={() => setShowWritePage(true)}
+            onViewDetail={(recordId) => {
+              setSelectedRecordId(recordId);
+              setShowRecordDetail(true);
+            }}
+          />
+        );
     }
   };
 
@@ -90,7 +132,7 @@ export default function App() {
         </div>
 
         {/* Navigation Bar - only show when not in detail or write view */}
-        {!showStatsDetail && !showWritePage && (
+        {!showStatsDetail && !showWritePage && !showRecordDetail && (
           <NavigationBar
             currentPage={currentPage}
             onPageChange={setCurrentPage}

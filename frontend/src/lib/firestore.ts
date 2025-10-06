@@ -78,29 +78,37 @@ export const getRecord = async (recordId: string) => {
 // 기록 조회 (사용자별 전체)
 export const getRecordsByUser = async (userId: string, category?: string) => {
   try {
-    let q: Query<DocumentData> = query(
-      collection(db, 'records'),
-      where('user_id', '==', userId),
-      orderBy('created_at', 'desc')
-    );
+    let q: Query<DocumentData>;
 
     if (category) {
       q = query(
         collection(db, 'records'),
         where('user_id', '==', userId),
-        where('category', '==', category),
-        orderBy('created_at', 'desc')
+        where('category', '==', category)
+      );
+    } else {
+      q = query(
+        collection(db, 'records'),
+        where('user_id', '==', userId)
       );
     }
 
     const querySnapshot = await getDocs(q);
-    const records = querySnapshot.docs.map(doc => ({
+    let records = querySnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     })) as Record[];
 
+    // Sort by created_at on client side
+    records.sort((a, b) => {
+      const aTime = a.created_at?.toMillis() || 0;
+      const bTime = b.created_at?.toMillis() || 0;
+      return bTime - aTime; // descending order
+    });
+
     return { data: records, error: null };
   } catch (error: any) {
+    console.error('Firestore error:', error);
     return { data: null, error: error.message };
   }
 };

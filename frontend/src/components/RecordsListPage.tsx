@@ -1,58 +1,50 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Plus, Film, Book, MapPin } from "lucide-react";
-
-interface Review {
-  id: number;
-  category: 'movie' | 'book' | 'place';
-  title: string;
-  date: string;
-  preview: string;
-  rating: number;
-}
-
-const mockReviews: Review[] = [
-  {
-    id: 1,
-    category: 'movie',
-    title: '오펜하이머',
-    date: '2024.03.15',
-    preview: '크리스토퍼 놀란의 놀라운 연출과 킬리언 머피의 연기가...',
-    rating: 5
-  },
-  {
-    id: 2,
-    category: 'book',
-    title: '1984',
-    date: '2024.03.12',
-    preview: '조지 오웰의 디스토피아 소설. 현재 사회와의 비교점이...',
-    rating: 4
-  },
-  {
-    id: 3,
-    category: 'place',
-    title: '제주도 카페거리',
-    date: '2024.03.10',
-    preview: '아름다운 바다 뷰와 함께 즐기는 커피 한잔. 분위기가...',
-    rating: 4
-  },
-  {
-    id: 4,
-    category: 'movie',
-    title: '기생충',
-    date: '2024.03.08',
-    preview: '봉준호 감독의 사회적 메시지가 담긴 걸작. 계급 갈등을...',
-    rating: 5
-  }
-];
+import { getRecordsByUser, Record } from "../lib/firestore";
+import { auth } from "../lib/firebase";
 
 interface RecordsListPageProps {
   onWriteReview: () => void;
+  onViewDetail: (recordId: string) => void;
 }
 
-export function RecordsListPage({ onWriteReview }: RecordsListPageProps) {
+export function RecordsListPage({ onWriteReview, onViewDetail }: RecordsListPageProps) {
   const [activeFilter, setActiveFilter] = useState('all');
+  const [records, setRecords] = useState<Record[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchRecords();
+  }, [activeFilter]);
+
+  const fetchRecords = async () => {
+    const user = auth.currentUser;
+    if (!user) {
+      setError('로그인이 필요합니다.');
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    console.log('Fetching records for user:', user.uid);
+    const category = activeFilter === 'all' ? undefined : activeFilter;
+    const { data, error: fetchError } = await getRecordsByUser(user.uid, category);
+
+    if (fetchError) {
+      console.error('Firestore fetch error:', fetchError);
+      setError(`데이터를 불러오는 중 오류가 발생했습니다: ${fetchError}`);
+    } else if (data) {
+      console.log('Records fetched:', data.length, 'records');
+      setRecords(data);
+    }
+
+    setLoading(false);
+  };
 
   const getIcon = (category: string) => {
     switch (category) {
@@ -70,16 +62,22 @@ export function RecordsListPage({ onWriteReview }: RecordsListPageProps) {
     { id: 'place', label: '장소' }
   ];
 
-  const filteredReviews = activeFilter === 'all' 
-    ? mockReviews 
-    : mockReviews.filter(review => review.category === activeFilter);
-
   const renderStars = (rating: number) => {
     return Array.from({ length: 5 }, (_, i) => (
       <span key={i} className={i < rating ? 'text-black' : 'text-gray-300'}>
         ⭐
       </span>
     ));
+  };
+
+  const formatDate = (timestamp: any) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    return date.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').slice(0, -1);
+  };
+
+  const getPreview = (record: Record) => {
+    return record.review.length > 50 ? record.review.substring(0, 50) + '...' : record.review;
   };
 
   return (
@@ -112,31 +110,51 @@ export function RecordsListPage({ onWriteReview }: RecordsListPageProps) {
 
       {/* Records List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-32">
-        {filteredReviews.map((review) => (
-          <Card key={review.id} className="border-gray-200">
-            <CardContent className="p-4">
-              <div className="flex items-start gap-3">
-                <div className="mt-1">
-                  {getIcon(review.category)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="truncate">{review.title}</h3>
-                    <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
-                      {review.date}
-                    </span>
+        {loading ? (
+          <div className="text-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-2 text-gray-500">로딩 중...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-8">
+            <p className="text-red-500">{error}</p>
+          </div>
+        ) : records.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500 mb-2">아직 기록이 없습니다.</p>
+            <p className="text-sm text-gray-400">오른쪽 하단의 + 버튼을 눌러 기록을 추가해보세요!</p>
+          </div>
+        ) : (
+          records.map((record) => (
+            <Card
+              key={record.id}
+              className="border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => onViewDetail(record.id!)}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <div className="mt-1">
+                    {getIcon(record.category)}
                   </div>
-                  <div className="flex items-center gap-1 mb-2">
-                    {renderStars(review.rating)}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="truncate">{record.title}</h3>
+                      <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
+                        {formatDate(record.created_at)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 mb-2">
+                      {renderStars(record.rating)}
+                    </div>
+                    <p className="text-sm text-gray-600 line-clamp-2">
+                      {getPreview(record)}
+                    </p>
                   </div>
-                  <p className="text-sm text-gray-600 line-clamp-2">
-                    {review.preview}
-                  </p>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
 
       {/* Floating Add Button */}

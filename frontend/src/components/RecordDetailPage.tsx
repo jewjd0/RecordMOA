@@ -1,0 +1,411 @@
+import { useState, useEffect } from "react";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import { AspectRatio } from "./ui/aspect-ratio";
+import { Star, Camera, ArrowLeft } from "lucide-react";
+import { getRecord, Record } from "../lib/firestore";
+import { Timestamp } from "firebase/firestore";
+
+interface RecordDetailPageProps {
+  recordId: string;
+  onBack: () => void;
+  onEdit: (recordId: string) => void;
+}
+
+export function RecordDetailPage({ recordId, onBack, onEdit }: RecordDetailPageProps) {
+  const [record, setRecord] = useState<Record | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchRecord();
+  }, [recordId]);
+
+  const fetchRecord = async () => {
+    setLoading(true);
+    setError(null);
+
+    const { data, error: fetchError } = await getRecord(recordId);
+
+    if (fetchError) {
+      console.error('Failed to fetch record:', fetchError);
+      setError('기록을 불러올 수 없습니다.');
+    } else if (data) {
+      setRecord(data);
+    }
+
+    setLoading(false);
+  };
+
+  const renderStars = (rating: number) => {
+    return Array.from({ length: 5 }, (_, i) => (
+      <Star
+        key={i}
+        size={24}
+        fill={i < rating ? 'currentColor' : 'none'}
+        className={`${i < rating ? 'text-primary' : 'text-gray-300'}`}
+      />
+    ));
+  };
+
+  const formatDate = (timestamp: Timestamp | undefined) => {
+    if (!timestamp) return '';
+    const date = timestamp.toDate();
+    return date.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col h-full bg-card items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <p className="mt-4 text-gray-600">로딩 중...</p>
+      </div>
+    );
+  }
+
+  if (error || !record) {
+    return (
+      <div className="flex flex-col h-full bg-card">
+        <div className="p-4 border-b border-gray-200 bg-card">
+          <div className="relative flex items-center">
+            <button
+              onClick={onBack}
+              className="absolute left-0 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <h1 className="flex-1 text-center">기록 상세</h1>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-red-500">{error || '기록을 찾을 수 없습니다.'}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const category = record.category;
+
+  return (
+    <div className="flex flex-col h-full bg-card">
+      {/* Header */}
+      <div className="p-4 border-b border-gray-200 bg-card">
+        <div className="relative flex items-center">
+          <button
+            onClick={onBack}
+            className="absolute left-0 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="flex-1 text-center">기록 상세</h1>
+          <button
+            onClick={() => onEdit(recordId)}
+            className="absolute right-0 px-4 py-2 bg-card text-foreground hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            수정
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto">
+        <Tabs value={category} className="p-4">
+          {/* Category Tabs */}
+          <TabsList className="grid w-full grid-cols-3 mb-6">
+            <TabsTrigger value="movie" disabled className="tab-title">영상</TabsTrigger>
+            <TabsTrigger value="book" disabled className="tab-title">도서</TabsTrigger>
+            <TabsTrigger value="place" disabled className="tab-title">장소</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="movie" className="space-y-6">
+            <MovieView record={record} renderStars={renderStars} formatDate={formatDate} />
+          </TabsContent>
+
+          <TabsContent value="book" className="space-y-6">
+            <BookView record={record} renderStars={renderStars} formatDate={formatDate} />
+          </TabsContent>
+
+          <TabsContent value="place" className="space-y-6">
+            <PlaceView record={record} renderStars={renderStars} formatDate={formatDate} />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}
+
+// Movie View Component
+interface ViewProps {
+  record: Record;
+  renderStars: (rating: number) => JSX.Element[];
+  formatDate: (timestamp: Timestamp | undefined) => string;
+}
+
+function MovieView({ record, renderStars, formatDate }: ViewProps) {
+  return (
+    <>
+      <div className="grid grid-cols-3 gap-4">
+        <div className="col-span-2 space-y-4">
+          {/* Title */}
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">제목</label>
+            <Input
+              value={record.title}
+              disabled
+              className="border-gray-300 bg-gray-50"
+            />
+          </div>
+
+          {/* Cast */}
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">출연자</label>
+            <Input
+              value={record.cast?.join(', ') || ''}
+              disabled
+              className="border-gray-300 bg-gray-50"
+            />
+          </div>
+
+          {/* Director */}
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">작가/감독</label>
+            <Input
+              value={record.director || ''}
+              disabled
+              className="border-gray-300 bg-gray-50"
+            />
+          </div>
+
+          {/* Watch Date */}
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">시청한 날짜</label>
+            <Input
+              value={formatDate(record.date_watched)}
+              disabled
+              className="border-gray-300 bg-gray-50"
+            />
+          </div>
+
+          {/* Rating */}
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">평가</label>
+            <div className="flex gap-1">
+              {renderStars(record.rating)}
+            </div>
+          </div>
+        </div>
+
+        {/* Poster */}
+        <div className="col-span-1">
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">포스터</label>
+            <AspectRatio ratio={3/4}>
+              {record.image_url ? (
+                <img
+                  src={record.image_url}
+                  alt="포스터"
+                  className="rounded-lg w-full h-full object-cover"
+                />
+              ) : (
+                <div className="border-2 border-dashed border-gray-300 rounded-lg h-full flex flex-col items-center justify-center bg-gray-50">
+                  <Camera size={24} className="text-gray-400 mb-1" />
+                  <p className="text-xs text-gray-500">이미지 없음</p>
+                </div>
+              )}
+            </AspectRatio>
+          </div>
+        </div>
+      </div>
+
+      {/* Review Content */}
+      <div className="space-y-2">
+        <label className="block text-sm text-gray-600">리뷰 내용</label>
+        <Textarea
+          value={record.review}
+          disabled
+          className="min-h-32 border-gray-300 resize-none bg-gray-50"
+        />
+      </div>
+    </>
+  );
+}
+
+function BookView({ record, renderStars, formatDate }: ViewProps) {
+  return (
+    <>
+      <div className="grid grid-cols-3 gap-4">
+        <div className="col-span-2 space-y-4">
+          {/* Title */}
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">제목</label>
+            <Input
+              value={record.title}
+              disabled
+              className="border-gray-300 bg-gray-50"
+            />
+          </div>
+
+          {/* Author */}
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">저자</label>
+            <Input
+              value={record.author || ''}
+              disabled
+              className="border-gray-300 bg-gray-50"
+            />
+          </div>
+
+          {/* Publisher */}
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">출판사</label>
+            <Input
+              value={record.publisher || ''}
+              disabled
+              className="border-gray-300 bg-gray-50"
+            />
+          </div>
+
+          {/* Reading Dates */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <label className="block text-sm text-gray-600">읽기 시작한 날짜</label>
+              <Input
+                value={formatDate(record.date_started)}
+                disabled
+                className="border-gray-300 bg-gray-50"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm text-gray-600">다 읽은 날짜</label>
+              <Input
+                value={formatDate(record.date_finished)}
+                disabled
+                className="border-gray-300 bg-gray-50"
+              />
+            </div>
+          </div>
+
+          {/* Rating */}
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">평가</label>
+            <div className="flex gap-1">
+              {renderStars(record.rating)}
+            </div>
+          </div>
+        </div>
+
+        {/* Cover */}
+        <div className="col-span-1">
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">표지</label>
+            <AspectRatio ratio={3/4}>
+              {record.image_url ? (
+                <img
+                  src={record.image_url}
+                  alt="표지"
+                  className="rounded-lg w-full h-full object-cover"
+                />
+              ) : (
+                <div className="border-2 border-dashed border-gray-300 rounded-lg h-full flex flex-col items-center justify-center bg-gray-50">
+                  <Camera size={24} className="text-gray-400 mb-1" />
+                  <p className="text-xs text-gray-500">이미지 없음</p>
+                </div>
+              )}
+            </AspectRatio>
+          </div>
+        </div>
+      </div>
+
+      {/* Review Content */}
+      <div className="space-y-2">
+        <label className="block text-sm text-gray-600">리뷰 내용</label>
+        <Textarea
+          value={record.review}
+          disabled
+          className="min-h-32 border-gray-300 resize-none bg-gray-50"
+        />
+      </div>
+    </>
+  );
+}
+
+function PlaceView({ record, renderStars, formatDate }: ViewProps) {
+  return (
+    <>
+      <div className="grid grid-cols-3 gap-4">
+        <div className="col-span-2 space-y-4">
+          {/* Place Name */}
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">장소명</label>
+            <Input
+              value={record.place_name || record.title}
+              disabled
+              className="border-gray-300 bg-gray-50"
+            />
+          </div>
+
+          {/* Location */}
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">위치</label>
+            <Input
+              value={record.location || ''}
+              disabled
+              className="border-gray-300 bg-gray-50"
+            />
+          </div>
+
+          {/* Visit Date */}
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">방문한 날짜</label>
+            <Input
+              value={formatDate(record.date_visited)}
+              disabled
+              className="border-gray-300 bg-gray-50"
+            />
+          </div>
+
+          {/* Rating */}
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">평가</label>
+            <div className="flex gap-1">
+              {renderStars(record.rating)}
+            </div>
+          </div>
+        </div>
+
+        {/* Photo */}
+        <div className="col-span-1">
+          <div className="space-y-2">
+            <label className="block text-sm text-gray-600">사진</label>
+            <AspectRatio ratio={3/4}>
+              {record.image_url ? (
+                <img
+                  src={record.image_url}
+                  alt="사진"
+                  className="rounded-lg w-full h-full object-cover"
+                />
+              ) : (
+                <div className="border-2 border-dashed border-gray-300 rounded-lg h-full flex flex-col items-center justify-center bg-gray-50">
+                  <Camera size={24} className="text-gray-400 mb-1" />
+                  <p className="text-xs text-gray-500">이미지 없음</p>
+                </div>
+              )}
+            </AspectRatio>
+          </div>
+        </div>
+      </div>
+
+      {/* Review Content */}
+      <div className="space-y-2">
+        <label className="block text-sm text-gray-600">리뷰 내용</label>
+        <Textarea
+          value={record.review}
+          disabled
+          className="min-h-32 border-gray-300 resize-none bg-gray-50"
+        />
+      </div>
+    </>
+  );
+}

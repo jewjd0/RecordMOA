@@ -1,23 +1,28 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { AspectRatio } from "./ui/aspect-ratio";
 import { Star, Camera, ArrowLeft } from "lucide-react";
-import { addRecord } from "../lib/firestore";
+import { addRecord, getRecord, updateRecord, Record } from "../lib/firestore";
 import { auth } from "../lib/firebase";
 import { Timestamp } from "firebase/firestore";
+import { uploadImage } from "../lib/cloudinary";
 
 interface ReviewWritePageProps {
   onBack: () => void;
+  editRecordId?: string; // 수정 모드일 때 전달되는 레코드 ID
 }
 
-export function ReviewWritePage({ onBack }: ReviewWritePageProps) {
+export function ReviewWritePage({ onBack, editRecordId }: ReviewWritePageProps) {
   const [activeTab, setActiveTab] = useState<'movie' | 'book' | 'place'>('movie');
   const [rating, setRating] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [movieData, setMovieData] = useState({
     title: "",
     cast: "",
@@ -40,6 +45,83 @@ export function ReviewWritePage({ onBack }: ReviewWritePageProps) {
     content: ""
   });
 
+  // 수정 모드일 때 기존 데이터 로드
+  useEffect(() => {
+    if (editRecordId) {
+      loadRecordData();
+    }
+  }, [editRecordId]);
+
+  const loadRecordData = async () => {
+    if (!editRecordId) return;
+
+    setDataLoading(true);
+    try {
+      const { data, error } = await getRecord(editRecordId);
+
+      if (error || !data) {
+        setError("기록을 불러오는데 실패했습니다.");
+        return;
+      }
+
+      // 카테고리에 따라 적절한 탭 설정
+      setActiveTab(data.category);
+      setRating(data.rating);
+
+      // 카테고리별 데이터 설정
+      if (data.category === 'movie') {
+        setMovieData({
+          title: data.title,
+          cast: data.cast?.join(', ') || "",
+          director: data.director || "",
+          watchDate: data.date_watched
+            ? new Date(data.date_watched.toDate()).toISOString().split('T')[0]
+            : "",
+          content: data.review
+        });
+      } else if (data.category === 'book') {
+        setBookData({
+          title: data.title,
+          author: data.author || "",
+          publisher: data.publisher || "",
+          startDate: data.date_started
+            ? new Date(data.date_started.toDate()).toISOString().split('T')[0]
+            : "",
+          endDate: data.date_finished
+            ? new Date(data.date_finished.toDate()).toISOString().split('T')[0]
+            : "",
+          content: data.review
+        });
+      } else if (data.category === 'place') {
+        setPlaceData({
+          name: data.title,
+          location: data.location || "",
+          visitDate: data.date_visited
+            ? new Date(data.date_visited.toDate()).toISOString().split('T')[0]
+            : "",
+          content: data.review
+        });
+      }
+    } catch (err) {
+      console.error("Error loading record:", err);
+      setError("기록을 불러오는데 실패했습니다.");
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const renderStars = () => {
     return Array.from({ length: 5 }, (_, i) => (
       <button
@@ -60,18 +142,18 @@ export function ReviewWritePage({ onBack }: ReviewWritePageProps) {
 
     // Validate required fields
     if (activeTab === 'movie') {
-      if (!movieData.title || !movieData.watchDate || rating === 0) {
-        setError("제목, 시청 날짜, 평가는 필수 항목입니다.");
+      if (!movieData.title || !movieData.watchDate) {
+        setError("제목과 시청 날짜는 필수 항목입니다.");
         return;
       }
     } else if (activeTab === 'book') {
-      if (!bookData.title || !bookData.startDate || rating === 0) {
-        setError("제목, 읽기 시작한 날짜, 평가는 필수 항목입니다.");
+      if (!bookData.title || !bookData.startDate) {
+        setError("제목과 읽기 시작한 날짜는 필수 항목입니다.");
         return;
       }
     } else if (activeTab === 'place') {
-      if (!placeData.name || !placeData.visitDate || rating === 0) {
-        setError("장소명, 방문 날짜, 평가는 필수 항목입니다.");
+      if (!placeData.name || !placeData.visitDate) {
+        setError("장소명과 방문 날짜는 필수 항목입니다.");
         return;
       }
     }
@@ -82,62 +164,127 @@ export function ReviewWritePage({ onBack }: ReviewWritePageProps) {
     try {
       const userId = auth.currentUser.uid;
 
-      if (activeTab === 'movie') {
-        await addRecord(userId, {
-          category: 'movie',
-          title: movieData.title,
-          cast: movieData.cast ? movieData.cast.split(',').map(c => c.trim()) : undefined,
-          director: movieData.director || undefined,
-          date_watched: Timestamp.fromDate(new Date(movieData.watchDate)),
-          rating,
-          review: movieData.content || ''
-        });
-      } else if (activeTab === 'book') {
-        await addRecord(userId, {
-          category: 'book',
-          title: bookData.title,
-          author: bookData.author || undefined,
-          publisher: bookData.publisher || undefined,
-          date_started: Timestamp.fromDate(new Date(bookData.startDate)),
-          date_finished: bookData.endDate ? Timestamp.fromDate(new Date(bookData.endDate)) : undefined,
-          rating,
-          review: bookData.content || ''
-        });
-      } else if (activeTab === 'place') {
-        await addRecord(userId, {
-          category: 'place',
-          title: placeData.name,
-          place_name: placeData.name,
-          location: placeData.location || undefined,
-          date_visited: Timestamp.fromDate(new Date(placeData.visitDate)),
-          rating,
-          review: placeData.content || ''
-        });
+      // 이미지 업로드 (있는 경우)
+      let imageUrl: string | undefined = undefined;
+      if (imageFile) {
+        const { url, error: uploadError } = await uploadImage(imageFile, `recordmoa/${activeTab}`);
+        if (uploadError) {
+          setError(`이미지 업로드 실패: ${uploadError}`);
+          setLoading(false);
+          return;
+        }
+        imageUrl = url || undefined;
       }
 
-      // Reset form
-      setRating(0);
-      setMovieData({
-        title: "",
-        cast: "",
-        director: "",
-        watchDate: "",
-        content: ""
-      });
-      setBookData({
-        title: "",
-        author: "",
-        publisher: "",
-        startDate: "",
-        endDate: "",
-        content: ""
-      });
-      setPlaceData({
-        name: "",
-        location: "",
-        visitDate: "",
-        content: ""
-      });
+      // 수정 모드일 때
+      if (editRecordId) {
+        let updateData: Partial<Record> = {
+          rating
+        };
+
+        // 이미지가 있을 때만 추가
+        if (imageUrl) {
+          updateData.image_url = imageUrl;
+        }
+
+        if (activeTab === 'movie') {
+          updateData = {
+            ...updateData,
+            title: movieData.title,
+            cast: movieData.cast ? movieData.cast.split(',').map(c => c.trim()) : [],
+            director: movieData.director || '',
+            date_watched: Timestamp.fromDate(new Date(movieData.watchDate)),
+            review: movieData.content || ''
+          };
+        } else if (activeTab === 'book') {
+          updateData = {
+            ...updateData,
+            title: bookData.title,
+            author: bookData.author || '',
+            publisher: bookData.publisher || '',
+            date_started: Timestamp.fromDate(new Date(bookData.startDate)),
+            date_finished: bookData.endDate ? Timestamp.fromDate(new Date(bookData.endDate)) : null,
+            review: bookData.content || ''
+          };
+        } else if (activeTab === 'place') {
+          updateData = {
+            ...updateData,
+            title: placeData.name,
+            place_name: placeData.name,
+            location: placeData.location || '',
+            date_visited: Timestamp.fromDate(new Date(placeData.visitDate)),
+            review: placeData.content || ''
+          };
+        }
+
+        await updateRecord(editRecordId, updateData);
+      } else {
+        // 신규 작성 모드일 때
+        if (activeTab === 'movie') {
+          const recordData: any = {
+            category: 'movie',
+            title: movieData.title,
+            cast: movieData.cast ? movieData.cast.split(',').map(c => c.trim()) : [],
+            director: movieData.director || '',
+            date_watched: Timestamp.fromDate(new Date(movieData.watchDate)),
+            rating,
+            review: movieData.content || ''
+          };
+          if (imageUrl) recordData.image_url = imageUrl;
+          await addRecord(userId, recordData);
+        } else if (activeTab === 'book') {
+          const recordData: any = {
+            category: 'book',
+            title: bookData.title,
+            author: bookData.author || '',
+            publisher: bookData.publisher || '',
+            date_started: Timestamp.fromDate(new Date(bookData.startDate)),
+            date_finished: bookData.endDate ? Timestamp.fromDate(new Date(bookData.endDate)) : null,
+            rating,
+            review: bookData.content || ''
+          };
+          if (imageUrl) recordData.image_url = imageUrl;
+          await addRecord(userId, recordData);
+        } else if (activeTab === 'place') {
+          const recordData: any = {
+            category: 'place',
+            title: placeData.name,
+            place_name: placeData.name,
+            location: placeData.location || '',
+            date_visited: Timestamp.fromDate(new Date(placeData.visitDate)),
+            rating,
+            review: placeData.content || ''
+          };
+          if (imageUrl) recordData.image_url = imageUrl;
+          await addRecord(userId, recordData);
+        }
+
+        // Reset form (only for new records)
+        setRating(0);
+        setImageFile(null);
+        setImagePreview(null);
+        setMovieData({
+          title: "",
+          cast: "",
+          director: "",
+          watchDate: "",
+          content: ""
+        });
+        setBookData({
+          title: "",
+          author: "",
+          publisher: "",
+          startDate: "",
+          endDate: "",
+          content: ""
+        });
+        setPlaceData({
+          name: "",
+          location: "",
+          visitDate: "",
+          content: ""
+        });
+      }
 
       // Go back to list
       onBack();
@@ -148,6 +295,31 @@ export function ReviewWritePage({ onBack }: ReviewWritePageProps) {
       setLoading(false);
     }
   };
+
+  // 데이터 로딩 중일 때
+  if (dataLoading) {
+    return (
+      <div className="flex flex-col h-full bg-card">
+        <div className="p-4 border-b border-gray-200 bg-card">
+          <div className="relative flex items-center">
+            <button
+              onClick={onBack}
+              className="absolute left-0 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <h1 className="flex-1 text-center">{editRecordId ? '수정하기' : '기록하기'}</h1>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">불러오는 중...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-card">
@@ -160,7 +332,7 @@ export function ReviewWritePage({ onBack }: ReviewWritePageProps) {
           >
             <ArrowLeft size={20} />
           </button>
-          <h1 className="flex-1 text-center">기록하기</h1>
+          <h1 className="flex-1 text-center">{editRecordId ? '수정하기' : '기록하기'}</h1>
         </div>
       </div>
 
@@ -172,41 +344,47 @@ export function ReviewWritePage({ onBack }: ReviewWritePageProps) {
           </div>
         )}
 
-        <Tabs defaultValue="movie" className="p-4" onValueChange={(value) => setActiveTab(value as 'movie' | 'book' | 'place')}>
+        <Tabs value={activeTab} className="p-4" onValueChange={(value) => setActiveTab(value as 'movie' | 'book' | 'place')}>
           {/* Category Tabs */}
           <TabsList className="grid w-full grid-cols-3 mb-6">
-            <TabsTrigger value="movie" className="tab-title">영상</TabsTrigger>
-            <TabsTrigger value="book" className="tab-title">도서</TabsTrigger>
-            <TabsTrigger value="place" className="tab-title">장소</TabsTrigger>
+            <TabsTrigger value="movie" className="tab-title" disabled={!!editRecordId}>영상</TabsTrigger>
+            <TabsTrigger value="book" className="tab-title" disabled={!!editRecordId}>도서</TabsTrigger>
+            <TabsTrigger value="place" className="tab-title" disabled={!!editRecordId}>장소</TabsTrigger>
           </TabsList>
 
           <TabsContent value="movie" className="space-y-6">
-            <MovieForm 
-              rating={rating} 
+            <MovieForm
+              rating={rating}
               data={movieData}
               onRatingChange={setRating}
               onDataChange={setMovieData}
               renderStars={renderStars}
+              imagePreview={imagePreview}
+              onImageChange={handleImageChange}
             />
           </TabsContent>
 
           <TabsContent value="book" className="space-y-6">
-            <BookForm 
-              rating={rating} 
+            <BookForm
+              rating={rating}
               data={bookData}
               onRatingChange={setRating}
               onDataChange={setBookData}
               renderStars={renderStars}
+              imagePreview={imagePreview}
+              onImageChange={handleImageChange}
             />
           </TabsContent>
 
           <TabsContent value="place" className="space-y-6">
-            <PlaceForm 
-              rating={rating} 
+            <PlaceForm
+              rating={rating}
               data={placeData}
               onRatingChange={setRating}
               onDataChange={setPlaceData}
               renderStars={renderStars}
+              imagePreview={imagePreview}
+              onImageChange={handleImageChange}
             />
           </TabsContent>
         </Tabs>
@@ -219,7 +397,7 @@ export function ReviewWritePage({ onBack }: ReviewWritePageProps) {
           disabled={loading}
           className="w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
-          {loading ? '저장 중...' : '저장'}
+          {loading ? (editRecordId ? '수정 중...' : '저장 중...') : (editRecordId ? '수정' : '저장')}
         </Button>
       </div>
     </div>
@@ -239,9 +417,11 @@ interface MovieFormProps {
   onRatingChange: (rating: number) => void;
   onDataChange: (data: any) => void;
   renderStars: () => JSX.Element[];
+  imagePreview: string | null;
+  onImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
-function MovieForm({ data, onDataChange, renderStars }: MovieFormProps) {
+function MovieForm({ data, onDataChange, renderStars, imagePreview, onImageChange }: MovieFormProps) {
   const handleChange = (field: string, value: string) => {
     onDataChange({ ...data, [field]: value });
   };
@@ -308,10 +488,22 @@ function MovieForm({ data, onDataChange, renderStars }: MovieFormProps) {
           <div className="space-y-2">
             <label className="block text-sm">포스터</label>
             <AspectRatio ratio={3/4}>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg h-full flex flex-col items-center justify-center hover:border-gray-400 transition-colors cursor-pointer">
-                <Camera size={24} className="text-gray-400 mb-1" />
-                <p className="text-xs text-gray-500">사진 업로드</p>
-              </div>
+              <label className="border-2 border-dashed border-gray-300 rounded-lg h-full flex flex-col items-center justify-center hover:border-gray-400 transition-colors cursor-pointer overflow-hidden">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={onImageChange}
+                  className="hidden"
+                />
+                {imagePreview ? (
+                  <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                ) : (
+                  <>
+                    <Camera size={24} className="text-gray-400 mb-1" />
+                    <p className="text-xs text-gray-500">사진 업로드</p>
+                  </>
+                )}
+              </label>
             </AspectRatio>
           </div>
         </div>
@@ -345,9 +537,11 @@ interface BookFormProps {
   onRatingChange: (rating: number) => void;
   onDataChange: (data: any) => void;
   renderStars: () => JSX.Element[];
+  imagePreview: string | null;
+  onImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
-function BookForm({ data, onDataChange, renderStars }: BookFormProps) {
+function BookForm({ data, onDataChange, renderStars, imagePreview, onImageChange }: BookFormProps) {
   const handleChange = (field: string, value: string) => {
     onDataChange({ ...data, [field]: value });
   };
@@ -425,10 +619,22 @@ function BookForm({ data, onDataChange, renderStars }: BookFormProps) {
           <div className="space-y-2">
             <label className="block text-sm">표지</label>
             <AspectRatio ratio={3/4}>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg h-full flex flex-col items-center justify-center hover:border-gray-400 transition-colors cursor-pointer">
-                <Camera size={24} className="text-gray-400 mb-1" />
-                <p className="text-xs text-gray-500">사진 업로드</p>
-              </div>
+              <label className="border-2 border-dashed border-gray-300 rounded-lg h-full flex flex-col items-center justify-center hover:border-gray-400 transition-colors cursor-pointer overflow-hidden">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={onImageChange}
+                  className="hidden"
+                />
+                {imagePreview ? (
+                  <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                ) : (
+                  <>
+                    <Camera size={24} className="text-gray-400 mb-1" />
+                    <p className="text-xs text-gray-500">사진 업로드</p>
+                  </>
+                )}
+              </label>
             </AspectRatio>
           </div>
         </div>
@@ -460,9 +666,11 @@ interface PlaceFormProps {
   onRatingChange: (rating: number) => void;
   onDataChange: (data: any) => void;
   renderStars: () => JSX.Element[];
+  imagePreview: string | null;
+  onImageChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
-function PlaceForm({ data, onDataChange, renderStars }: PlaceFormProps) {
+function PlaceForm({ data, onDataChange, renderStars, imagePreview, onImageChange }: PlaceFormProps) {
   const handleChange = (field: string, value: string) => {
     onDataChange({ ...data, [field]: value });
   };
@@ -517,10 +725,22 @@ function PlaceForm({ data, onDataChange, renderStars }: PlaceFormProps) {
         <div className="col-span-1">
           <div className="space-y-2">
             <label className="block text-sm">사진</label>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer">
-              <Camera size={32} className="mx-auto text-gray-400 mb-2" />
-              <p className="text-xs text-gray-500">사진 업로드</p>
-            </div>
+            <label className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer block overflow-hidden">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={onImageChange}
+                className="hidden"
+              />
+              {imagePreview ? (
+                <img src={imagePreview} alt="Preview" className="w-full h-32 object-cover rounded" />
+              ) : (
+                <>
+                  <Camera size={32} className="mx-auto text-gray-400 mb-2" />
+                  <p className="text-xs text-gray-500">사진 업로드</p>
+                </>
+              )}
+            </label>
           </div>
         </div>
       </div>

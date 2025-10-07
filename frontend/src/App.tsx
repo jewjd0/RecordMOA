@@ -20,6 +20,7 @@ export default function App() {
   const [showWritePage, setShowWritePage] = useState(false);
   const [showRecordDetail, setShowRecordDetail] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+  const [editRecordId, setEditRecordId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -46,8 +47,9 @@ export default function App() {
             setRefreshKey(prev => prev + 1);
           }}
           onEdit={(recordId) => {
-            // TODO: 수정 페이지로 이동
-            console.log('Edit record:', recordId);
+            setEditRecordId(recordId);
+            setShowRecordDetail(false);
+            setShowWritePage(true);
           }}
           onDelete={(recordId) => {
             setShowRecordDetail(false);
@@ -59,10 +61,14 @@ export default function App() {
     }
 
     if (showWritePage) {
-      return <ReviewWritePage onBack={() => {
-        setShowWritePage(false);
-        setRefreshKey(prev => prev + 1);
-      }} />;
+      return <ReviewWritePage
+        editRecordId={editRecordId || undefined}
+        onBack={() => {
+          setShowWritePage(false);
+          setEditRecordId(null);
+          setRefreshKey(prev => prev + 1);
+        }}
+      />;
     }
 
     switch (currentPage) {

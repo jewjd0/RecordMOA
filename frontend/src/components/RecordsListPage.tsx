@@ -15,9 +15,12 @@ export function RecordsListPage({ onWriteReview, onViewDetail }: RecordsListPage
   const [records, setRecords] = useState<Record[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const recordsPerPage = 10;
 
   useEffect(() => {
     fetchRecords();
+    setCurrentPage(1); // 필터 변경 시 첫 페이지로 이동
   }, [activeFilter]);
 
   const fetchRecords = async () => {
@@ -63,8 +66,8 @@ export function RecordsListPage({ onWriteReview, onViewDetail }: RecordsListPage
   ];
 
   const renderStars = (rating: number) => {
-    return Array.from({ length: 5 }, (_, i) => (
-      <span key={i} className={i < rating ? 'text-black' : 'text-gray-300'}>
+    return Array.from({ length: rating }, (_, i) => (
+      <span key={i} className="text-yellow-400">
         ⭐
       </span>
     ));
@@ -78,6 +81,18 @@ export function RecordsListPage({ onWriteReview, onViewDetail }: RecordsListPage
 
   const getPreview = (record: Record) => {
     return record.review.length > 50 ? record.review.substring(0, 50) + '...' : record.review;
+  };
+
+  // 페이지네이션 계산
+  const indexOfLastRecord = currentPage * recordsPerPage;
+  const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
+  const currentRecords = records.slice(indexOfFirstRecord, indexOfLastRecord);
+  const totalPages = Math.ceil(records.length / recordsPerPage);
+
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+    // 페이지 변경 시 스크롤을 맨 위로
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -125,35 +140,110 @@ export function RecordsListPage({ onWriteReview, onViewDetail }: RecordsListPage
             <p className="text-sm text-gray-400">오른쪽 하단의 + 버튼을 눌러 기록을 추가해보세요!</p>
           </div>
         ) : (
-          records.map((record) => (
-            <Card
-              key={record.id}
-              className="border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => onViewDetail(record.id!)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="mt-1">
-                    {getIcon(record.category)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <h3 className="truncate">{record.title}</h3>
-                      <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
-                        {formatDate(record.created_at)}
-                      </span>
+          <>
+            {currentRecords.map((record) => (
+              <Card
+                key={record.id}
+                className="border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => onViewDetail(record.id!)}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    {/* Thumbnail Image */}
+                    {record.image_url ? (
+                      <div className="w-16 h-16 flex-shrink-0 rounded overflow-hidden bg-gray-100">
+                        <img
+                          src={record.image_url}
+                          alt={record.title}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-16 h-16 flex-shrink-0 rounded bg-gray-50 flex items-center justify-center">
+                        {getIcon(record.category)}
+                      </div>
+                    )}
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <h3 className="truncate">{record.title}</h3>
+                        <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
+                          {formatDate(record.created_at)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 mb-2">
+                        {renderStars(record.rating)}
+                      </div>
+                      <p className="text-sm text-gray-600 line-clamp-2">
+                        {getPreview(record)}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-1 mb-2">
-                      {renderStars(record.rating)}
-                    </div>
-                    <p className="text-sm text-gray-600 line-clamp-2">
-                      {getPreview(record)}
-                    </p>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+                </CardContent>
+              </Card>
+            ))}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-2 py-4">
+                {/* Previous Button */}
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className={`px-3 py-1 rounded ${
+                    currentPage === 1
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  이전
+                </button>
+
+                {/* Page Numbers */}
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNumber) => {
+                  // 현재 페이지 주변 페이지만 표시
+                  if (
+                    pageNumber === 1 ||
+                    pageNumber === totalPages ||
+                    (pageNumber >= currentPage - 1 && pageNumber <= currentPage + 1)
+                  ) {
+                    return (
+                      <button
+                        key={pageNumber}
+                        onClick={() => handlePageChange(pageNumber)}
+                        className={`px-3 py-1 rounded ${
+                          currentPage === pageNumber
+                            ? 'bg-[#5E7F19] text-white'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    );
+                  } else if (
+                    pageNumber === currentPage - 2 ||
+                    pageNumber === currentPage + 2
+                  ) {
+                    return <span key={pageNumber} className="text-gray-400">...</span>;
+                  }
+                  return null;
+                })}
+
+                {/* Next Button */}
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className={`px-3 py-1 rounded ${
+                    currentPage === totalPages
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+                >
+                  다음
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 

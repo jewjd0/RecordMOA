@@ -4,6 +4,7 @@ import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { AspectRatio } from "./ui/aspect-ratio";
+import { Skeleton } from "./ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +14,7 @@ import {
 import { Star, Camera, ArrowLeft, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { getRecord, Record, deleteRecord } from "../lib/firestore";
 import { Timestamp } from "firebase/firestore";
+import { getDetailImageUrl } from "../lib/cloudinary";
 
 interface RecordDetailPageProps {
   recordId: string;
@@ -76,9 +78,45 @@ export function RecordDetailPage({ recordId, onBack, onEdit, onDelete }: RecordD
 
   if (loading) {
     return (
-      <div className="flex flex-col h-full bg-card items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-        <p className="mt-4 text-gray-600">로딩 중...</p>
+      <div className="flex flex-col h-full bg-card">
+        {/* Header Skeleton */}
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-5 w-5 rounded" />
+            <Skeleton className="h-6 w-24" />
+            <Skeleton className="h-5 w-5 rounded" />
+          </div>
+        </div>
+
+        {/* Content Skeleton */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {/* Image Skeleton */}
+          <Skeleton className="w-full h-64 rounded-lg" />
+
+          {/* Title & Rating */}
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-3/4" />
+            <Skeleton className="h-6 w-32" />
+          </div>
+
+          {/* Tabs Skeleton */}
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Skeleton className="h-9 w-20" />
+              <Skeleton className="h-9 w-20" />
+            </div>
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-2/3" />
+          </div>
+
+          {/* Review Skeleton */}
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-24" />
+            <Skeleton className="h-32 w-full rounded-lg" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -210,8 +248,8 @@ interface ViewProps {
 function MovieView({ record, renderStars, formatDate }: ViewProps) {
   return (
     <>
-      <div className="grid grid-cols-3 gap-4">
-        <div className="col-span-2 space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="md:col-span-2 space-y-4">
           {/* Title */}
           <div className="space-y-2">
             <label className="block text-sm text-gray-600">제목</label>
@@ -268,7 +306,7 @@ function MovieView({ record, renderStars, formatDate }: ViewProps) {
             <AspectRatio ratio={3/4}>
               {record.image_url ? (
                 <img
-                  src={record.image_url}
+                  src={getDetailImageUrl(record.image_url)}
                   alt="포스터"
                   className="rounded-lg w-full h-full object-cover"
                 />
@@ -299,8 +337,8 @@ function MovieView({ record, renderStars, formatDate }: ViewProps) {
 function BookView({ record, renderStars, formatDate }: ViewProps) {
   return (
     <>
-      <div className="grid grid-cols-3 gap-4">
-        <div className="col-span-2 space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="md:col-span-2 space-y-4">
           {/* Title */}
           <div className="space-y-2">
             <label className="block text-sm text-gray-600">제목</label>
@@ -367,7 +405,7 @@ function BookView({ record, renderStars, formatDate }: ViewProps) {
             <AspectRatio ratio={3/4}>
               {record.image_url ? (
                 <img
-                  src={record.image_url}
+                  src={getDetailImageUrl(record.image_url)}
                   alt="표지"
                   className="rounded-lg w-full h-full object-cover"
                 />
@@ -398,8 +436,8 @@ function BookView({ record, renderStars, formatDate }: ViewProps) {
 function PlaceView({ record, renderStars, formatDate }: ViewProps) {
   return (
     <>
-      <div className="grid grid-cols-3 gap-4">
-        <div className="col-span-2 space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="md:col-span-2 space-y-4">
           {/* Place Name */}
           <div className="space-y-2">
             <label className="block text-sm text-gray-600">장소명</label>
@@ -446,7 +484,7 @@ function PlaceView({ record, renderStars, formatDate }: ViewProps) {
             <AspectRatio ratio={3/4}>
               {record.image_url ? (
                 <img
-                  src={record.image_url}
+                  src={getDetailImageUrl(record.image_url)}
                   alt="사진"
                   className="rounded-lg w-full h-full object-cover"
                 />

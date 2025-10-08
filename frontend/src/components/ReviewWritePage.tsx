@@ -9,6 +9,7 @@ import { addRecord, getRecord, updateRecord, Record } from "../lib/firestore";
 import { auth } from "../lib/firebase";
 import { Timestamp } from "firebase/firestore";
 import { uploadImage } from "../lib/cloudinary";
+import { handleError, showSuccess, showWarning, handleRetryableError } from "../lib/errorHandler";
 
 interface ReviewWritePageProps {
   onBack: () => void;
@@ -60,7 +61,7 @@ export function ReviewWritePage({ onBack, editRecordId }: ReviewWritePageProps) 
       const { data, error } = await getRecord(editRecordId);
 
       if (error || !data) {
-        setError("기록을 불러오는데 실패했습니다.");
+        handleError(new Error(error || "데이터를 찾을 수 없습니다."), "기록을 불러오는데 실패했습니다.");
         return;
       }
 
@@ -103,8 +104,7 @@ export function ReviewWritePage({ onBack, editRecordId }: ReviewWritePageProps) 
         });
       }
     } catch (err) {
-      console.error("Error loading record:", err);
-      setError("기록을 불러오는데 실패했습니다.");
+      handleError(err, "기록을 불러오는데 실패했습니다.");
     } finally {
       setDataLoading(false);
     }
@@ -136,26 +136,31 @@ export function ReviewWritePage({ onBack, editRecordId }: ReviewWritePageProps) 
 
   const handleSave = async () => {
     if (!auth.currentUser) {
-      setError("로그인이 필요합니다.");
+      showWarning("로그인이 필요합니다.");
       return;
     }
 
     // Validate required fields
     if (activeTab === 'movie') {
       if (!movieData.title || !movieData.watchDate) {
-        setError("제목과 시청 날짜는 필수 항목입니다.");
+        showWarning("제목과 시청 날짜는 필수 항목입니다.");
         return;
       }
     } else if (activeTab === 'book') {
       if (!bookData.title || !bookData.startDate) {
-        setError("제목과 읽기 시작한 날짜는 필수 항목입니다.");
+        showWarning("제목과 읽기 시작한 날짜는 필수 항목입니다.");
         return;
       }
     } else if (activeTab === 'place') {
       if (!placeData.name || !placeData.visitDate) {
-        setError("장소명과 방문 날짜는 필수 항목입니다.");
+        showWarning("장소명과 방문 날짜는 필수 항목입니다.");
         return;
       }
+    }
+
+    if (!rating) {
+      showWarning("별점을 선택해주세요.");
+      return;
     }
 
     setLoading(true);
@@ -169,7 +174,11 @@ export function ReviewWritePage({ onBack, editRecordId }: ReviewWritePageProps) 
       if (imageFile) {
         const { url, error: uploadError } = await uploadImage(imageFile, `recordmoa/${activeTab}`);
         if (uploadError) {
-          setError(`이미지 업로드 실패: ${uploadError}`);
+          handleRetryableError(
+            new Error(uploadError),
+            handleSave,
+            "이미지 업로드에 실패했습니다."
+          );
           setLoading(false);
           return;
         }
@@ -286,11 +295,17 @@ export function ReviewWritePage({ onBack, editRecordId }: ReviewWritePageProps) 
         });
       }
 
+      // 성공 메시지
+      showSuccess(editRecordId ? "기록이 수정되었습니다." : "기록이 저장되었습니다.");
+
       // Go back to list
       onBack();
     } catch (err) {
-      console.error("Error saving record:", err);
-      setError("저장 중 오류가 발생했습니다.");
+      handleRetryableError(
+        err,
+        handleSave,
+        "저장 중 오류가 발생했습니다."
+      );
     } finally {
       setLoading(false);
     }
@@ -428,8 +443,8 @@ function MovieForm({ data, onDataChange, renderStars, imagePreview, onImageChang
 
   return (
     <>
-      <div className="grid grid-cols-3 gap-4">
-        <div className="col-span-2 space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="md:col-span-2 space-y-4">
           {/* Title */}
           <div className="space-y-2">
             <label className="block text-sm">제목</label>
@@ -548,8 +563,8 @@ function BookForm({ data, onDataChange, renderStars, imagePreview, onImageChange
 
   return (
     <>
-      <div className="grid grid-cols-3 gap-4">
-        <div className="col-span-2 space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="md:col-span-2 space-y-4">
           {/* Title */}
           <div className="space-y-2">
             <label className="block text-sm">제목</label>
@@ -584,7 +599,7 @@ function BookForm({ data, onDataChange, renderStars, imagePreview, onImageChange
           </div>
 
           {/* Reading Dates */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-2">
               <label className="block text-sm">읽기 시작한 날짜</label>
               <Input
@@ -677,8 +692,8 @@ function PlaceForm({ data, onDataChange, renderStars, imagePreview, onImageChang
 
   return (
     <>
-      <div className="grid grid-cols-3 gap-4">
-        <div className="col-span-2 space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="md:col-span-2 space-y-4">
           {/* Place Name */}
           <div className="space-y-2">
             <label className="block text-sm">장소명</label>

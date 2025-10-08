@@ -137,3 +137,64 @@ export const deleteRecord = async (recordId: string) => {
     return { error: error.message };
   }
 };
+
+// 사용자 프로필 타입
+export interface UserProfile {
+  uid: string;
+  name: string;
+  email: string;
+  profile_image_url?: string;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+// 사용자 프로필 생성
+export const createUserProfile = async (userId: string, email: string, name: string) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userData: Omit<UserProfile, 'uid'> = {
+      name,
+      email,
+      created_at: Timestamp.now(),
+      updated_at: Timestamp.now()
+    };
+    await updateDoc(userRef, userData).catch(async () => {
+      // 문서가 없으면 생성
+      const { setDoc } = await import('firebase/firestore');
+      await setDoc(userRef, { uid: userId, ...userData });
+    });
+    return { error: null };
+  } catch (error: any) {
+    return { error: error.message };
+  }
+};
+
+// 사용자 프로필 조회
+export const getUserProfile = async (userId: string) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+
+    if (userSnap.exists()) {
+      return { data: userSnap.data() as UserProfile, error: null };
+    } else {
+      return { data: null, error: 'User profile not found' };
+    }
+  } catch (error: any) {
+    return { data: null, error: error.message };
+  }
+};
+
+// 사용자 프로필 업데이트
+export const updateUserProfile = async (userId: string, updates: { name?: string; profile_image_url?: string }) => {
+  try {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      ...updates,
+      updated_at: Timestamp.now()
+    });
+    return { error: null };
+  } catch (error: any) {
+    return { error: error.message };
+  }
+};

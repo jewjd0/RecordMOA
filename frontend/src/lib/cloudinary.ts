@@ -58,3 +58,80 @@ export const getPublicIdFromUrl = (url: string): string | null => {
     return null;
   }
 };
+
+// Cloudinary 이미지 URL 최적화 (리사이징, 압축, 포맷 변환)
+export const getOptimizedImageUrl = (
+  url: string,
+  options: {
+    width?: number;
+    height?: number;
+    quality?: number | 'auto';
+    format?: 'auto' | 'webp' | 'jpg' | 'png';
+    crop?: 'fill' | 'fit' | 'scale' | 'limit';
+  } = {}
+): string => {
+  try {
+    const {
+      width,
+      height,
+      quality = 'auto',
+      format = 'auto',
+      crop = 'fill'
+    } = options;
+
+    const parts = url.split('/upload/');
+    if (parts.length !== 2) return url;
+
+    const transformations: string[] = [];
+
+    // 크기 조정
+    if (width || height) {
+      const sizeParams = [];
+      if (width) sizeParams.push(`w_${width}`);
+      if (height) sizeParams.push(`h_${height}`);
+      sizeParams.push(`c_${crop}`);
+      transformations.push(sizeParams.join(','));
+    }
+
+    // 품질 설정
+    transformations.push(`q_${quality}`);
+
+    // 포맷 변환
+    transformations.push(`f_${format}`);
+
+    const transformString = transformations.join('/');
+    return `${parts[0]}/upload/${transformString}/${parts[1]}`;
+  } catch (error) {
+    console.error('Failed to optimize image URL:', error);
+    return url;
+  }
+};
+
+// 썸네일 URL 생성 (목록용)
+export const getThumbnailUrl = (url: string): string => {
+  return getOptimizedImageUrl(url, {
+    width: 300,
+    quality: 'auto',
+    format: 'auto'
+  });
+};
+
+// 상세 이미지 URL 생성 (상세 페이지용)
+export const getDetailImageUrl = (url: string): string => {
+  return getOptimizedImageUrl(url, {
+    width: 1200,
+    quality: 'auto',
+    format: 'auto'
+  });
+};
+
+// 프로필 이미지 URL 생성
+export const getProfileImageUrl = (url: string): string => {
+  return getOptimizedImageUrl(url, {
+    width: 200,
+    height: 200,
+    quality: 'auto',
+    format: 'auto',
+    crop: 'fill'
+  });
+};

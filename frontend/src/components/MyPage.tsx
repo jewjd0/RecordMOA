@@ -3,35 +3,39 @@ import { Settings, User, LogOut } from "lucide-react";
 import { auth } from "../lib/firebase";
 import { logOut } from "../lib/auth";
 import { useState, useEffect } from "react";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { getUserProfile } from "../lib/firestore";
+import { getProfileImageUrl } from "../lib/cloudinary";
 
-export function MyPage() {
+interface MyPageProps {
+  onShowProfileEdit: () => void;
+}
+
+export function MyPage({ onShowProfileEdit }: MyPageProps) {
   const [userName, setUserName] = useState<string>("사용자");
   const [userEmail, setUserEmail] = useState<string>("");
+  const [profileImageUrl, setProfileImageUrl] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchUserInfo = async () => {
-      const user = auth.currentUser;
-      if (user) {
-        setUserEmail(user.email || "");
-
-        // Firestore에서 사용자 이름 가져오기
-        try {
-          const userDoc = await getDoc(doc(db, "users", user.uid));
-          if (userDoc.exists()) {
-            setUserName(userDoc.data().name || "사용자");
-          }
-        } catch (error) {
-          console.error("사용자 정보 로드 실패:", error);
-        }
-      }
-      setLoading(false);
-    };
-
     fetchUserInfo();
   }, []);
+
+  const fetchUserInfo = async () => {
+    const user = auth.currentUser;
+    if (user) {
+      setUserEmail(user.email || "");
+
+      // Firestore에서 사용자 프로필 가져오기
+      const { data, error } = await getUserProfile(user.uid);
+      if (error) {
+        console.error("사용자 정보 로드 실패:", error);
+      } else if (data) {
+        setUserName(data.name || "사용자");
+        setProfileImageUrl(data.profile_image_url);
+      }
+    }
+    setLoading(false);
+  };
 
   const handleLogout = async () => {
     if (confirm("로그아웃 하시겠습니까?")) {
@@ -40,8 +44,8 @@ export function MyPage() {
   };
 
   const menuItems = [
-    { icon: User, label: '프로필 설정', description: '닉네임, 프로필 이미지 변경' },
-    { icon: Settings, label: '앱 설정', description: '알림, 테마, 백업 설정' }
+    { icon: User, label: '프로필 설정', description: '닉네임, 프로필 이미지 변경', onClick: onShowProfileEdit },
+    { icon: Settings, label: '앱 설정', description: '알림, 테마, 백업 설정', onClick: () => alert('준비 중입니다.') }
   ];
 
   return (
@@ -57,8 +61,12 @@ export function MyPage() {
         {/* Profile Section */}
         <Card className="border-gray-200">
           <CardContent className="p-6 text-center">
-            <div className="w-20 h-20 bg-gray-200 rounded-full mx-auto mb-4 flex items-center justify-center">
-              <User size={32} className="text-gray-400" />
+            <div className="w-20 h-20 bg-gray-200 rounded-full mx-auto mb-4 flex items-center justify-center overflow-hidden">
+              {profileImageUrl ? (
+                <img src={getProfileImageUrl(profileImageUrl)} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <User size={32} className="text-gray-400" />
+              )}
             </div>
             {loading ? (
               <p className="text-gray-500">로딩 중...</p>
@@ -74,7 +82,7 @@ export function MyPage() {
         {/* Menu Items */}
         <div className="space-y-3">
           {menuItems.map((item, index) => (
-            <Card key={index} className="border-gray-200 cursor-pointer hover:bg-gray-50">
+            <Card key={index} className="border-gray-200 cursor-pointer hover:bg-gray-50" onClick={item.onClick}>
               <CardContent className="p-4">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">

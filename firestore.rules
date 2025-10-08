@@ -3,12 +3,82 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Helper functions for validation
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isValidString(value, minLen, maxLen) {
+      return value is string && value.size() >= minLen && value.size() <= maxLen;
+    }
+
+    function isValidRating(rating) {
+      return rating is int && rating >= 1 && rating <= 5;
+    }
+
+    function isValidCategory(category) {
+      return category in ['movie', 'book', 'place'];
+    }
+
     // Records collection - 사용자는 자신의 기록만 읽고 쓸 수 있음
     match /records/{recordId} {
-      allow read: if request.auth != null && resource.data.user_id == request.auth.uid;
-      allow create: if request.auth != null && request.resource.data.user_id == request.auth.uid;
-      allow update: if request.auth != null && resource.data.user_id == request.auth.uid;
-      allow delete: if request.auth != null && resource.data.user_id == request.auth.uid;
+      // 읽기: 인증된 사용자가 자신의 기록만 읽을 수 있음
+      allow read: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+
+      // 생성: 인증된 사용자가 자신의 user_id로만 생성 가능, 데이터 유효성 검증
+      allow create: if isAuthenticated()
+                    && request.resource.data.user_id == request.auth.uid
+                    && isValidCategory(request.resource.data.category)
+                    && isValidString(request.resource.data.title, 1, 200)
+                    && isValidRating(request.resource.data.rating)
+                    && isValidString(request.resource.data.review, 1, 5000)
+                    && request.resource.data.created_at is timestamp
+                    && request.resource.data.updated_at is timestamp;
+
+      // 수정: 자신의 기록만 수정 가능, user_id와 created_at 변경 불가
+      allow update: if isAuthenticated()
+                    && resource.data.user_id == request.auth.uid
+                    && request.resource.data.user_id == resource.data.user_id
+                    && request.resource.data.created_at == resource.data.created_at
+                    && isValidCategory(request.resource.data.category)
+                    && isValidString(request.resource.data.title, 1, 200)
+                    && isValidRating(request.resource.data.rating)
+                    && isValidString(request.resource.data.review, 1, 5000)
+                    && request.resource.data.updated_at is timestamp;
+
+      // 삭제: 자신의 기록만 삭제 가능
+      allow delete: if isAuthenticated() && resource.data.user_id == request.auth.uid;
+    }
+
+    // Users collection - 사용자 프로필
+    match /users/{userId} {
+      // 읽기: 인증된 사용자가 자신의 프로필만 읽을 수 있음
+      allow read: if isAuthenticated() && isOwner(userId);
+
+      // 생성: 인증된 사용자가 자신의 프로필만 생성 가능
+      allow create: if isAuthenticated()
+                    && isOwner(userId)
+                    && request.resource.data.uid == userId
+                    && isValidString(request.resource.data.name, 1, 50)
+                    && isValidString(request.resource.data.email, 1, 100)
+                    && request.resource.data.created_at is timestamp
+                    && request.resource.data.updated_at is timestamp;
+
+      // 수정: 자신의 프로필만 수정 가능, uid와 email, created_at 변경 불가
+      allow update: if isAuthenticated()
+                    && isOwner(userId)
+                    && request.resource.data.uid == resource.data.uid
+                    && request.resource.data.email == resource.data.email
+                    && request.resource.data.created_at == resource.data.created_at
+                    && isValidString(request.resource.data.name, 1, 50)
+                    && request.resource.data.updated_at is timestamp;
+
+      // 삭제: 자신의 프로필만 삭제 가능
+      allow delete: if isAuthenticated() && isOwner(userId);
     }
 
     // 모든 다른 접근은 거부

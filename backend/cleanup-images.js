@@ -23,17 +23,33 @@ if (fs.existsSync(serviceAccountPath)) {
   serviceAccount = require('./serviceAccountKey.json');
 } else {
   // CI/CD 환경: 환경 변수에서 읽기
-  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+  let serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!serviceAccountJson) {
     console.error('❌ Firebase 서비스 계정 키를 찾을 수 없습니다.');
     console.error('로컬: serviceAccountKey.json 파일이 필요합니다.');
     console.error('CI/CD: FIREBASE_SERVICE_ACCOUNT 환경 변수가 필요합니다.');
     process.exit(1);
   }
+
+  // 공백 및 개행 문자 정리
+  serviceAccountJson = serviceAccountJson.trim();
+
+  // Base64로 인코딩되어 있는 경우 디코딩
+  if (!serviceAccountJson.startsWith('{')) {
+    try {
+      serviceAccountJson = Buffer.from(serviceAccountJson, 'base64').toString('utf-8');
+    } catch (err) {
+      // Base64가 아니면 그냥 진행
+    }
+  }
+
   try {
     serviceAccount = JSON.parse(serviceAccountJson);
+    console.log('✅ Firebase 서비스 계정 키 로드 성공');
   } catch (error) {
     console.error('❌ FIREBASE_SERVICE_ACCOUNT JSON 파싱 실패:', error.message);
+    console.error('첫 50자:', serviceAccountJson.substring(0, 50));
+    console.error('마지막 50자:', serviceAccountJson.substring(serviceAccountJson.length - 50));
     process.exit(1);
   }
 }

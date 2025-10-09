@@ -1,0 +1,17 @@
+# Node modules
+node_modules/
+
+# 환경 변수
+.env
+.env.local
+
+# Firebase Admin SDK 키 (절대 커밋하지 마세요!)
+serviceAccountKey.json
+
+# 로그 파일
+logs/
+*.log
+
+# OS 파일
+.DS_Store
+Thumbs.db

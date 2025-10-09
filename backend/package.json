@@ -1,0 +1,17 @@
+{
+  "name": "recordmoa-backend",
+  "version": "1.0.0",
+  "description": "RecordMOA Backend Scripts",
+  "main": "cleanup-images.js",
+  "scripts": {
+    "cleanup": "node cleanup-images.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cloudinary": "^1.41.0",
+    "dotenv": "^16.3.1",
+    "firebase-admin": "^12.0.0"
+  }
+}

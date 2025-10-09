@@ -31,15 +31,32 @@ export const uploadImage = async (
   }
 };
 
-// Cloudinary 이미지 삭제 (public_id 필요)
-export const deleteImage = async (publicId: string): Promise<{ error: string | null }> => {
+// Cloudinary 이미지 삭제 (URL 기반)
+export const deleteImage = async (imageUrl: string): Promise<{ error: string | null }> => {
   try {
-    // 주의: Cloudinary 삭제는 서버 사이드에서 API Key/Secret이 필요합니다.
-    // 클라이언트에서는 직접 삭제할 수 없으므로,
-    // 실제 프로덕션에서는 백엔드 API를 통해 삭제해야 합니다.
-    console.warn('Cloudinary 이미지 삭제는 백엔드에서 처리해야 합니다.');
+    // Cloudinary 삭제는 서버 사이드에서 API Key/Secret이 필요합니다.
+    // 클라이언트에서는 직접 삭제할 수 없으므로, Firestore에 삭제 대기 목록에 추가합니다.
+    const publicId = getPublicIdFromUrl(imageUrl);
+    if (!publicId) {
+      console.warn('Invalid Cloudinary URL:', imageUrl);
+      return { error: 'Invalid image URL' };
+    }
+
+    // Firestore에 삭제 대기 이미지 기록
+    const { addDoc, collection, Timestamp } = await import('firebase/firestore');
+    const { db } = await import('./firebase');
+
+    await addDoc(collection(db, 'pending_image_deletions'), {
+      public_id: publicId,
+      image_url: imageUrl,
+      created_at: Timestamp.now(),
+      status: 'pending'
+    });
+
+    console.log('Image marked for deletion:', publicId);
     return { error: null };
   } catch (error: any) {
+    console.error('Failed to mark image for deletion:', error);
     return { error: error.message };
   }
 };

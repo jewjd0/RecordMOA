@@ -1,0 +1,57 @@
+name: Cleanup Cloudinary Images
+
+on:
+  schedule:
+    # 매일 오전 3시 (한국시간 기준)
+    # UTC 18:00 = KST 03:00 (UTC+9)
+    - cron: '0 18 * * *'
+
+  # 수동 실행 옵션 (GitHub Actions 페이지에서 버튼 클릭)
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          npm ci
+
+      - name: Create .env file
+        run: |
+          cd backend
+          cat > .env << EOF
+          CLOUDINARY_CLOUD_NAME=${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY=${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET=${{ secrets.CLOUDINARY_API_SECRET }}
+          EOF
+
+      - name: Create Firebase service account key
+        run: |
+          cd backend
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > serviceAccountKey.json
+
+      - name: Run cleanup script
+        run: |
+          cd backend
+          npm run cleanup
+
+      - name: Upload logs (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cleanup-logs
+          path: backend/logs/
+          retention-days: 7

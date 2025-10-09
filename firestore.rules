@@ -81,6 +81,20 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && isOwner(userId);
     }
 
+    // Pending Image Deletions - 삭제 대기 이미지 목록
+    match /pending_image_deletions/{deletionId} {
+      // 생성: 인증된 사용자만 가능
+      allow create: if isAuthenticated()
+                    && request.resource.data.created_at is timestamp
+                    && request.resource.data.status == 'pending';
+
+      // 읽기: 인증된 사용자만 가능 (관리 목적)
+      allow read: if isAuthenticated();
+
+      // 수정/삭제: 향후 백엔드 관리자 기능으로 확장 예정
+      allow update, delete: if false;
+    }
+
     // 모든 다른 접근은 거부
     match /{document=**} {
       allow read, write: if false;

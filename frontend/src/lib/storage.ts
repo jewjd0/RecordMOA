@@ -21,8 +21,7 @@ export const uploadImage = async (
 // 이미지 삭제 (Cloudinary)
 export const deleteImage = async (imageUrl: string): Promise<{ error: string | null }> => {
   try {
-    // Cloudinary 이미지 삭제는 백엔드에서 처리하는 것이 권장됨
-    // 여기서는 URL만 제거하고 실제 삭제는 나중에 구현
+    // Cloudinary 이미지 삭제를 위해 삭제 대기 목록에 추가
     const result = await cloudinaryDelete(imageUrl);
     return result;
   } catch (error: any) {

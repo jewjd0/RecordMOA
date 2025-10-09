@@ -14,7 +14,7 @@ import {
 import { Star, Camera, ArrowLeft, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { getRecord, Record, deleteRecord } from "../lib/firestore";
 import { Timestamp } from "firebase/firestore";
-import { getDetailImageUrl } from "../lib/cloudinary";
+import { getDetailImageUrl, deleteImage } from "../lib/cloudinary";
 
 interface RecordDetailPageProps {
   recordId: string;
@@ -50,12 +50,27 @@ export function RecordDetailPage({ recordId, onBack, onEdit, onDelete }: RecordD
   };
 
   const handleDelete = async () => {
-    const { error: deleteError } = await deleteRecord(recordId);
-    if (deleteError) {
+    try {
+      // 이미지가 있으면 삭제 대기 목록에 추가
+      if (record?.image_url) {
+        const { error: imageDeleteError } = await deleteImage(record.image_url);
+        if (imageDeleteError) {
+          console.warn('Failed to mark image for deletion:', imageDeleteError);
+          // 이미지 삭제 실패해도 게시물은 삭제 진행
+        }
+      }
+
+      // Firestore에서 게시물 삭제
+      const { error: deleteError } = await deleteRecord(recordId);
+      if (deleteError) {
+        setError('삭제 중 오류가 발생했습니다.');
+        console.error('Delete error:', deleteError);
+      } else {
+        onDelete(recordId);
+      }
+    } catch (error) {
       setError('삭제 중 오류가 발생했습니다.');
-      console.error('Delete error:', deleteError);
-    } else {
-      onDelete(recordId);
+      console.error('Delete error:', error);
     }
   };
 

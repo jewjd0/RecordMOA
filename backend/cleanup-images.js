@@ -11,20 +11,54 @@
 require('dotenv').config();
 const admin = require('firebase-admin');
 const cloudinary = require('cloudinary').v2;
+const fs = require('fs');
+const path = require('path');
 
 // Firebase Admin 초기화
+let serviceAccount;
+const serviceAccountPath = path.join(__dirname, 'serviceAccountKey.json');
+
+if (fs.existsSync(serviceAccountPath)) {
+  // 로컬 환경: serviceAccountKey.json 파일 사용
+  serviceAccount = require('./serviceAccountKey.json');
+} else {
+  // CI/CD 환경: 환경 변수에서 읽기
+  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!serviceAccountJson) {
+    console.error('❌ Firebase 서비스 계정 키를 찾을 수 없습니다.');
+    console.error('로컬: serviceAccountKey.json 파일이 필요합니다.');
+    console.error('CI/CD: FIREBASE_SERVICE_ACCOUNT 환경 변수가 필요합니다.');
+    process.exit(1);
+  }
+  try {
+    serviceAccount = JSON.parse(serviceAccountJson);
+  } catch (error) {
+    console.error('❌ FIREBASE_SERVICE_ACCOUNT JSON 파싱 실패:', error.message);
+    process.exit(1);
+  }
+}
+
 admin.initializeApp({
-  credential: admin.credential.cert(require('./serviceAccountKey.json')),
+  credential: admin.credential.cert(serviceAccount),
 });
 
 const db = admin.firestore();
 
 // Cloudinary 설정
-cloudinary.config({
+const cloudinaryConfig = {
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+};
+
+// 설정 값 검증
+if (!cloudinaryConfig.cloud_name || !cloudinaryConfig.api_key || !cloudinaryConfig.api_secret) {
+  console.error('❌ Cloudinary 설정이 불완전합니다.');
+  console.error('필요한 환경 변수: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET');
+  process.exit(1);
+}
+
+cloudinary.config(cloudinaryConfig);
 
 /**
  * 삭제 대기 중인 이미지 삭제

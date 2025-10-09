@@ -64,14 +64,45 @@ export const deleteImage = async (imageUrl: string): Promise<{ error: string | n
 // URL에서 public_id 추출
 export const getPublicIdFromUrl = (url: string): string | null => {
   try {
+    // Cloudinary URL 형식:
+    // https://res.cloudinary.com/{cloud_name}/image/upload/{transformations}/{version}/folder/name.ext
+    // 또는
+    // https://res.cloudinary.com/{cloud_name}/image/upload/{version}/folder/name.ext
+
     const parts = url.split('/');
     const uploadIndex = parts.indexOf('upload');
     if (uploadIndex === -1) return null;
 
-    const pathAfterUpload = parts.slice(uploadIndex + 2).join('/');
-    const publicId = pathAfterUpload.split('.')[0];
+    // upload 이후의 모든 부분
+    const afterUpload = parts.slice(uploadIndex + 1);
+
+    // 변환 파라미터와 버전 번호 제거
+    // v로 시작하는 부분(버전 번호)을 찾음
+    let startIndex = 0;
+    for (let i = 0; i < afterUpload.length; i++) {
+      // 변환 파라미터는 건너뛰기 (w_300, q_auto 등)
+      // 버전 번호는 v로 시작 (v1234567890)
+      if (afterUpload[i].startsWith('v') && /^v\d+$/.test(afterUpload[i])) {
+        startIndex = i + 1;
+        break;
+      }
+      // 변환 파라미터가 없고 바로 폴더가 나오는 경우
+      if (!afterUpload[i].includes('_') && !afterUpload[i].includes(',')) {
+        startIndex = i;
+        break;
+      }
+    }
+
+    // 버전 이후부터 확장자 전까지가 public_id
+    const pathParts = afterUpload.slice(startIndex);
+    const fullPath = pathParts.join('/');
+
+    // 확장자 제거
+    const publicId = fullPath.replace(/\.[^.]+$/, '');
+
     return publicId;
   } catch (error) {
+    console.error('Failed to extract public_id from URL:', url, error);
     return null;
   }
 };
